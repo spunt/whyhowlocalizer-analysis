@@ -1,63 +1,83 @@
-function allinput = wrapper_level1_whyhow(covidx, varargin)
+function allinput = wrapper_level1_whyhow(varargin)
 % WRAPPER_LEVEL1_WHYHOW
 %
-% USAGE: allinput = wrapper_level1_whyhow(covidx, varargin)
-%           
-% To show default settings, run without any arguments.
+%   USAGE: allinput = wrapper_level1_whyhow(varargin)
+% __________________________________________________________________________
+%  OUTPUT
+%   allinput: cell array containing matlabbatch structures for running model 
+%   specification, estimation, and then calculating contrasts 
+% __________________________________________________________________________
+%  OPTIONAL INPUTS (VARARGIN)
+%   These are entered as `'name', value` argument pairs. Matching is not
+%   case-sensitive and partial name matches are OK. To see default values,
+%   run `wrapper_level1_whyhow` without an output variable.
 %
-% covidx    Indices of blockwise covariates to include. One or more of:
+% THESE VARARGINS ARE USED FOR FINDING THE NECESSARY FILES AND DIRECTORIES
+% | :------------- | ------------------------------------------------------------------------------------------ |
+% | studydir       | full path to directory containing subject data folders                                     |
+% | behavpat       | search pattern for finding behavioral data within subject dirs, e.g., 'behav/whyhow*mat'   |
+% | epipat         | search pattern for finding functional data file(s) within each run, e.g., 'sw*nii'         |
+% | nuisancepat    | search pattern for finding nuisance regressor file within each run, e.g., 'rp*txt'         |
+% | runpat         | searc h pattern for finding run directories within subject dirs, e.g.,'raw/BOLD_WhyHow*'    |
+% | subpat         | search pattern for finding subject directories within studydir, e.g., 'Subject*'           |
+% | brainmask      | full path to brain mask to use (leave empty for none)                                      |
+% 
+% THESE VARARGINS ARE USED TO SPECIFY RELEVANT DETAILS ABOUT THE IMAGE AND BEHAVIORAL DATA BEING MODELED
+% | :------------- | ------------------------------------------------------------------------------------------  |
+% | is4D           | flag for 4D image file (0=No, 1=Yes)                                                        |
+% | nskip          | number of initial TRs that have been removed (for adjusting stimulus onsets)                |
+% | TR             | acquisition repetition time (in seconds)                                                    |
+% | yesnokeys      | keys corresponding to yes/no responses (e.g., [1 2])                                        |
 %
-%           1 - Duration of each block
-%           2 - Number of errors in each block
-%           3 - Number of errors (foils only) in each block
-%
+% THESE VARARGINS ARE USED TO CONFIGURE THE MODEL AND ESTIMATION METHODS
+% | :------------- | ------------------------------------------------------------------------------------------  |
+% | basename       | base name for the analysis (e.g., 'WhyHow_SmoothedData')                                    |
+% | model          | string specifying model to use ('2x2' for full design, '1x2' to collapse faces/hands factor |
+% | incl_err       | flag to include parametric covariate modeling blockwise variation in # of errors            |
+% | incl_rt        | flag to include parametric covariate modeling blockwise variation in response time          |
+% | armethod       | autocorrelation removal method (0=None, 1=AR(1), 2=Weighted Least Squares (WLS), 3=FAST)    |
+% | HPF            | high-pass filter cutoff to use (in seconds)                                                 |
+% | maskthresh     | implicit masking threshold (proportion of globals), default = 0.8                           |
+% | fcontrast      | flag to compute omnibus F-contrast (useful for feature selection, e.g., in PPI analysis)    |
+% | run_it_now     | flag to run analysis now (0=No, 1=Yes)                                                      |
+% 
 
 % | SET DEFAULTS AND PARSE VARARGIN
 % | ===========================================================================
 defaults = {
-'studydir',         '/path/to/dir/containing/subjectdirs',            ...
-'HPF',              100,            ...
-'armethod',         2,              ...
-'epifname',         [],             ...
-'nuisancepat',      'bad*txt',      ...
-'epipat',           'wbua*nii',      ...
-'subid',            'CC*',          ...
-'runid',            'EP*LOI_2*',     ...
-'behavid',          'loi2*mat',     ...
-'basename',         'LOI2',         ...
-'brainmask',        '',             ...
-'model',            '2X2',          ...
-'fcontrast',        1,              ...
-'nskip',            4,              ...
-'runtest',          0,              ...
-'is4D',             1,              ...
-'TR',               1,              ...
-'yesnokeys',        [1 2]           ...
+'armethod',         2,                  ...
+'basename',         'WHYHOWLOC',        ...
+'behavpat',         'behav/whyhow*mat', ...
+'brainmask',        '',                 ...
+'epipat',           'swbua*nii',        ...
+'fcontrast',        1,                  ...
+'HPF',              100,                ...
+'incl_err',         1,                  ...
+'incl_rt',          1,                  ...
+'is4D',             1,                  ...
+'maskthresh',       0.8,                ...
+'model',            '2x2',              ...
+'nskip',            4,                  ...
+'nuisancepat',      'rp*txt',           ...
+'runpat',           'raw/BOLD*',        ...
+'studydir',         pwd,                ...
+'subpat',           'Subject*',         ...
+'TR',               1,                  ...
+'run_it_now',       0,                  ...
+'yesnokeys',        [1 2]               ...
  };
 vals = setargs(defaults, varargin);
 if nargin==0, mfile_showhelp; fprintf('\t= DEFAULT SETTINGS =\n'); disp(vals); return; end
 fprintf('\n\t= CURRENT SETTINGS =\n'); disp(vals);
 
+
 % | PATHS
 % | ===========================================================================
-[subdir, subnam] = files([studydir filesep subid]);
-
-% | EPI FNAME
-% | ===========================================================================
-if ~isempty(epifname)
-    epifname = fullfile(studydir, epifname);
-    if exist(epifname, 'file')
-        fnepi = load(epifname);
-    else
-        disp('epifname could not be found!');
-        fnepi = [];
-    end
-else
-    fnepi = [];
-end
+[subdir, subnam] = files([studydir filesep subpat]);
 
 % | ANALYSIS NAME
 % | ===========================================================================
+covidx          = find([incl_rt incl_err]);
 armethodlabels  = {'NoAR1' 'AR1' 'WLS'};
 covnames        = {'Duration' 'Errors' 'FoilErrors'};
 if ~isempty(covidx)
@@ -67,16 +87,12 @@ else
     pmstr = 'None';
 end
 analysisname  = sprintf('%s_%s_Pmodby_%s_%s_%ds_%s', basename, model, ...
-                        pmstr, armethodlabels{armethod + 1}, HPF, bob_timestamp);
+                        pmstr, armethodlabels{armethod + 1}, HPF, bspm_timestamp);
 printmsg(analysisname, 'msgtitle', 'Analysis Name');
 
 % | IMAGING PARAMETERS
 % | ========================================================================
 adjons          = TR*nskip;
-
-% | RUNTIME OPTIONS
-% | ===========================================================================
-if runtest, subdir = subdir(1); end
 
 % | SUBJECT LOOP
 % | ===========================================================================
@@ -85,7 +101,7 @@ for s = 1:length(subdir)
 
     % | Check Subject and Define Folders
     % | ========================================================================
-    rundir      = files([subdir{s} filesep 'raw' filesep runid]);
+    rundir      = files([subdir{s} filesep runpat]);
     if isempty(rundir), printmsg('Valid run directory not found, moving on...', 'msgtitle', subnam{s}); continue; end
     analysisdir = fullfile(subdir{s}, 'analysis', analysisname);
     if any([exist(fullfile(analysisdir, 'mask.img'), 'file') exist(fullfile(analysisdir, 'mask.nii'), 'file')])
@@ -95,21 +111,16 @@ for s = 1:length(subdir)
 
     % | Behavioral and Nuisance Regressor Files
     % | ========================================================================
-    nuisance    = files([subdir{s} filesep 'raw' filesep runid filesep nuisancepat]);
-    behav       = files([subdir{s} filesep 'behav' filesep behavid]);
+    nuisance    = files([subdir{s} filesep runpat filesep nuisancepat]);
+    behav       = files([subdir{s} filesep behavpat]);
 
     % | Get Images
     % | ========================================================================
     images          = cell(size(rundir));
-    if ~isempty(fnepi)
-        subidx = strcmp(fnepi.subname, subnam{s});
-        images = fnepi.epifname(subidx);
-    else
-        for r = 1:length(rundir)
-            images{r} = files([rundir{r} filesep epipat]);
-            if isempty(images{r})
-                error('\nImage data not found! Failed search pattern:\n%s', [rundir{r} filesep epipat]);
-            end
+    for r = 1:length(rundir)
+        images{r} = files([rundir{r} filesep epipat]);
+        if isempty(images{r})
+            error('\nImage data not found! Failed search pattern:\n%s', [rundir{r} filesep epipat]);
         end
     end
 
@@ -170,6 +181,7 @@ for s = 1:length(subdir)
     general_info.autocorrelation    = armethod;
     general_info.nuisance_file      = nuisance;
     general_info.brainmask          = brainmask;
+    general_info.maskthresh         = maskthresh; 
     general_info.hrf_derivs         = [0 0];
     general_info.mt_res             = 16;
     general_info.mt_onset           = 8;
@@ -181,7 +193,7 @@ for s = 1:length(subdir)
     if ncond==2
         w2 = [1 -1];
     else
-        w2 = [.5 .5 -.5 -.5; .5 -5 .5 -.5; 1 0 -1 0; 0 1 0 -1; 1 -1 0 0; 0 0 1 -1];
+        w2 = [.5 .5 -.5 -.5; .5 -5 .5 -.5; 1 0 -1 0; 0 1 0 -1; 1 -1 0 0; 0 0 1 -1; .5 -.5 -.5 .5];
     end
     weights = [w1; w2];
     ncon    = size(weights,1);
@@ -205,89 +217,93 @@ for s = 1:length(subdir)
     clear general_info runs contrasts b modelpm modelpmnames
 
 end
+
+% | Run if desired
+if run_it_now, bspm_runbatch(allinput); end
+
 end
 % =========================================================================
 % * SUBFUNCTIONS
 % =========================================================================
 function b = get_behavior(in, opt, yesnokeys)
-% GET_BEHAVIOR
-%
-%   USAGE: b = get_behavior(in, opt)
-%
-%       in      behavioral data filename (.mat)
-%       opt     '2x2'  - full design
-%               '1x2'  - why vs. how
-%
-%       Columns for b.blockwise
-%          1 - Block
-%          2 - Cond
-%          3 - Onset
-%          4 - Duration
-%          5 - Total_Errors
-%          6 - Foil_Errors
-%
-% CREATED: Bob Spunt, Ph.D. (bobspunt@gmail.com) - 2014.02.24
-% =========================================================================
-if nargin < 1, error('USAGE: b = get_behavior(in, opt, yesnokeys)'); end
-if nargin < 2, opt = '2x2'; end
-if nargin < 3, yesnokeys = [1 2]; end
-if iscell(in), in = char(in); end
+    % GET_BEHAVIOR
+    %
+    %   USAGE: b = get_behavior(in, opt)
+    %
+    %       in      behavioral data filename (.mat)
+    %       opt     '2x2'  - full design
+    %               '1x2'  - why vs. how
+    %
+    %       Columns for b.blockwise
+    %          1 - Block
+    %          2 - Cond
+    %          3 - Onset
+    %          4 - Duration
+    %          5 - Total_Errors
+    %          6 - Foil_Errors
+    %
+    % CREATED: Bob Spunt, Ph.D. (bobspunt@gmail.com) - 2014.02.24
+    % =========================================================================
+    if nargin < 1, error('USAGE: b = get_behavior(in, opt, yesnokeys)'); end
+    if nargin < 2, opt = '2x2'; end
+    if nargin < 3, yesnokeys = [1 2]; end
+    if iscell(in), in = char(in); end
 
-% | read data
-% | ========================================================================
-d = load(in);
-b.subjectID = d.subjectID;
-if ismember({'result'},fieldnames(d))
-    data        = d.result.trialSeeker;
-    blockwise   = d.result.blockSeeker;
-else
-    data        = d.trialSeeker;
-    blockwise   = d.blockSeeker;
-end
+    % | read data
+    % | ========================================================================
+    d = load(in);
+    b.subjectID = d.subjectID;
+    if ismember({'result'},fieldnames(d))
+        data        = d.result.trialSeeker;
+        blockwise   = d.result.blockSeeker;
+    else
+        data        = d.trialSeeker;
+        blockwise   = d.blockSeeker;
+    end
 
-% | blockwise accuracy and durations
-% | ========================================================================
-ntrials         = length(data(data(:,1)==1,1));
-data(data(:,8)==yesnokeys(1), 8) = 1;
-data(data(:,8)==yesnokeys(2), 8) = 2;
-data(:,10)      = data(:,4)~=data(:,8); % errors
-data(data(:,8)==0, 7:8) = NaN; % NR to NaN
-blockwise(:,3)  = data(data(:,2)==1, 6);
-blockwise(:,4)  = data(data(:,2)==ntrials, 9) - data(data(:,2)==1, 6);
+    % | blockwise accuracy and durations
+    % | ========================================================================
+    ntrials         = length(data(data(:,1)==1,1));
+    data(data(:,8)==yesnokeys(1), 8) = 1;
+    data(data(:,8)==yesnokeys(2), 8) = 2;
+    data(:,10)      = data(:,4)~=data(:,8); % errors
+    data(data(:,8)==0, 7:8) = NaN; % NR to NaN
+    blockwise(:,3)  = data(data(:,2)==1, 6);
+    blockwise(:,4)  = data(data(:,2)==ntrials, 9) - data(data(:,2)==1, 6);
 
-% | compute block-wise error counts
-% | ========================================================================
-for i = 1:size(blockwise, 1)
-    blockwise(i,5) = sum(data(data(:,1)==i,10));  % all errors
-    blockwise(i,6) = sum(data(data(:,1)==i & data(:,4)==2, 10)); % foil errors
-end
+    % | compute block-wise error counts
+    % | ========================================================================
+    for i = 1:size(blockwise, 1)
+        blockwise(i,5) = sum(data(data(:,1)==i,10));  % all errors
+        blockwise(i,6) = sum(data(data(:,1)==i & data(:,4)==2, 10)); % foil errors
+    end
 
-% | re-code data
-% | ========================================================================
-con     = blockwise(:,2);
-condata = data(:,3);
-switch lower(opt)
-    case {'2x2'}
-        b.condlabels = {'Why_Face' 'Why_Hand' 'How_Face' 'How_Hand'};
-    case {'1x2'}
-        b.condlabels = {'Why' 'How'};
-        blockwise(con==2, 2)                    = 1;
-        data(condata==2, 3)                     = 1;
-        blockwise(ismember(con,[3 4]), 2)       = 2;
-        data(ismember(condata,[3 4]), 3)        = 2;
-end
-for i = 1:length(unique(data(:,3)))
-    cdata = data(data(:,3)==i, [7 10]);
-    b.accuracy(i)  = 100*(sum(cdata(:,2)==0)/size(cdata,1));
-    b.rt(i)        = nanmean(cdata(:,1));
-end
-b.blockwise = blockwise;
-b.varlabels = {'Block' 'Cond' 'Onset' 'Duration' 'Total_Errors' 'Foil_Errors'};
+    % | re-code data
+    % | ========================================================================
+    con     = blockwise(:,2);
+    condata = data(:,3);
+    switch lower(opt)
+        case {'2x2'}
+            b.condlabels = {'Why_Face' 'Why_Hand' 'How_Face' 'How_Hand'};
+        case {'1x2'}
+            b.condlabels = {'Why' 'How'};
+            blockwise(con==2, 2)                    = 1;
+            data(condata==2, 3)                     = 1;
+            blockwise(ismember(con,[3 4]), 2)       = 2;
+            data(ismember(condata,[3 4]), 3)        = 2;
+    end
+    for i = 1:length(unique(data(:,3)))
+        cdata = data(data(:,3)==i, [7 10]);
+        b.accuracy(i)  = 100*(sum(cdata(:,2)==0)/size(cdata,1));
+        b.rt(i)        = nanmean(cdata(:,1));
+    end
+    b.blockwise = blockwise;
+    b.varlabels = {'Block' 'Cond' 'Onset' 'Duration' 'Total_Errors' 'Foil_Errors'};
 end
 function mfile_showhelp(varargin)
-% MFILE_SHOWHELP
-ST = dbstack('-completenames');
-if isempty(ST), fprintf('\nYou must call this within a function\n\n'); return; end
-eval(sprintf('help %s', ST(2).file));
+    % MFILE_SHOWHELP
+    ST = dbstack('-completenames');
+    if isempty(ST), fprintf('\nYou must call this within a function\n\n'); return; end
+    eval(sprintf('help %s', ST(2).file));
 end
 
