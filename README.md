@@ -42,8 +42,3 @@ Software for analyzing single-subject fMRI data on the Why/How Localizer using S
 | fcontrast      | flag to compute omnibus F-contrast (useful for feature selection, e.g., in PPI analysis)  (0=No, 1=Yes) |
 | run_it_now     | flag to run analysis now (0=No, 1=Yes)                                                                  |
 
-
-
-
-
-
