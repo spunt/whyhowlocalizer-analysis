@@ -4,8 +4,8 @@ function allinput = wrapper_level1_whyhow(varargin)
 %   USAGE: allinput = wrapper_level1_whyhow(varargin)
 % __________________________________________________________________________
 %  OUTPUT
-%   allinput: cell array containing matlabbatch structures for running model 
-%   specification, estimation, and then calculating contrasts 
+%   allinput: cell array containing matlabbatch structures for running model
+%   specification, estimation, and then calculating contrasts
 % __________________________________________________________________________
 %  OPTIONAL INPUTS (VARARGIN)
 %   These are entered as `'name', value` argument pairs. Matching is not
@@ -21,7 +21,7 @@ function allinput = wrapper_level1_whyhow(varargin)
 % | runpat         | searc h pattern for finding run directories within subject dirs, e.g.,'raw/BOLD_WhyHow*'    |
 % | subpat         | search pattern for finding subject directories within studydir, e.g., 'Subject*'           |
 % | brainmask      | full path to brain mask to use (leave empty for none)                                      |
-% 
+%
 % THESE VARARGINS ARE USED TO SPECIFY RELEVANT DETAILS ABOUT THE IMAGE AND BEHAVIORAL DATA BEING MODELED
 % | :------------- | ------------------------------------------------------------------------------------------  |
 % | is4D           | flag for 4D image file (0=No, 1=Yes)                                                        |
@@ -40,7 +40,7 @@ function allinput = wrapper_level1_whyhow(varargin)
 % | maskthresh     | implicit masking threshold (proportion of globals), default = 0.8                           |
 % | fcontrast      | flag to compute omnibus F-contrast (useful for feature selection, e.g., in PPI analysis)    |
 % | run_it_now     | flag to run analysis now (0=No, 1=Yes)                                                      |
-% 
+%
 
 % | SET DEFAULTS AND PARSE VARARGIN
 % | ===========================================================================
@@ -55,11 +55,11 @@ defaults = {
 'incl_err',         1,                  ...
 'incl_rt',          1,                  ...
 'is4D',             1,                  ...
-'maskthresh',       0.8,                ...
+'maskthresh',       -Inf,                ...
 'model',            '2x2',              ...
 'nskip',            0,                  ...
-'nuisancepat',      '',           ...
-'runpat',           'ra*',        ...
+'nuisancepat',      'rp*txt',           ...
+'runpat',           'raw/bol*',        ...
 'studydir',         '/Users/bobspunt/Documents/fmri/keren',                ...
 'subpat',           'sub*',         ...
 'TR',               1.5,                  ...
@@ -112,11 +112,11 @@ for s = 1:length(subdir)
     % | Behavioral and Nuisance Regressor Files
     % | ========================================================================
     if ~isempty(nuisancepat)
-        nuisance    = files([subdir{s} filesep runpat filesep nuisancepat]);
+        nuisance    = get_files([subdir{s} filesep runpat filesep nuisancepat], 'Nuisancer regressor')
     else
         nuisance = [];
     end
-    behav       = files([subdir{s} filesep behavpat]);
+    behav       = get_files([subdir{s} filesep behavpat], 'Behavioral data');
 
     % | Get Images
     % | ========================================================================
@@ -171,13 +171,13 @@ for s = 1:length(subdir)
         end
 
     end
-    
-    
+
+
     if length(rundir)==1
         images = images{1};
         if iscell(nuisance), nuisance = nuisance{1}; end
     end
-    
+
 
     % | General Information
     % | ========================================================================
@@ -188,7 +188,7 @@ for s = 1:length(subdir)
     general_info.autocorrelation    = armethod;
     general_info.nuisance_file      = nuisance;
     general_info.brainmask          = brainmask;
-    general_info.maskthresh         = maskthresh; 
+    general_info.maskthresh         = maskthresh;
     general_info.hrf_derivs         = [0 0];
     general_info.mt_res             = 16;
     general_info.mt_onset           = 8;
@@ -259,7 +259,7 @@ function b = get_behavior(in, opt, yesnokeys)
     % | read data
     % | ========================================================================
     d = load(in);
-    b.subjectID = d.subjectID;
+    % b.subjectID = d.subjectID;
     if ismember({'result'},fieldnames(d))
         data        = d.result.trialSeeker;
         blockwise   = d.result.blockSeeker;
@@ -313,4 +313,10 @@ function mfile_showhelp(varargin)
     if isempty(ST), fprintf('\nYou must call this within a function\n\n'); return; end
     eval(sprintf('help %s', ST(2).file));
 end
-
+function f = get_files(pat, label)
+    f = files(pat);
+    if isempty(f)
+        error('\n\n%s file not found using search pattern:\n%s\n\n', label, pat)
+    end
+    fprintf('\n%s file:\n%s\n\n', label, char(f))
+end
